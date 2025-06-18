@@ -186,9 +186,9 @@ class Player:
     Klasa reprezentująca program grający z algorytmem alpha-beta pruning i tablicą otwarć.
     """
     def __init__(self, player_id: int = 1):
-        self.team_name = "1"
+        self.team_name = "Unbeatable AI"
         self.team_members = ["Kacper Daniel", "Paweł Karwecki", "Tadeusz Jagniewski"]
-        self.max_depth = 5
+        self.max_depth = 6
         self.player_id = player_id  # ID gracza AI (0 lub 1)
         
         # Tablica otwarć - klucz to tuple z historii ruchów, wartość to najlepszy ruch
@@ -290,7 +290,6 @@ class Player:
         if len(valid_moves) == 1:
             return valid_moves[0]
         
-        # NOWY KOD: Sprawdź tablicę otwarć na początku
         opening_move = self.get_opening_move(game)
         if opening_move is not None:
             print(f"Using opening book move: {opening_move}")

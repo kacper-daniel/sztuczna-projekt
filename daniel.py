@@ -188,7 +188,7 @@ class Player:
     def __init__(self, player_id: int = 1):
         self.team_name = "Unbeatable AI"
         self.team_members = ["Kacper Daniel", "Paweł Karwecki", "Tadeusz Jagniewski"]
-        self.max_depth = 6
+        self.max_depth = 8
         self.player_id = player_id  # ID gracza AI (0 lub 1)
         
         # Tablica otwarć - klucz to tuple z historii ruchów, wartość to najlepszy ruch

@@ -92,6 +92,10 @@ class Game:
         
         return True
     
+    def is_full(self) -> bool:
+        """Sprawdza czy plansza jest pełna."""
+        return all(len(col) >= self.n_rows for col in self.board)
+    
     def check_winner(self) -> int:
         """
         Sprawdza czy ktoś wygrał grę.
@@ -177,16 +181,105 @@ class Game:
         
         return False
     
-
-    
 class Player:
     """ 
-    Klasa reprezentująca program grający z algorytmem alpha-beta pruning.
+    Klasa reprezentująca program grający z algorytmem alpha-beta pruning i tablicą otwarć.
     """
-    def __init__(self):
+    def __init__(self, player_id: int = 1):
         self.team_name = "1"
         self.team_members = ["Kacper Daniel", "Paweł Karwecki", "Tadeusz Jagniewski"]
-        self.max_depth = 7
+        self.max_depth = 5
+        self.player_id = player_id  # ID gracza AI (0 lub 1)
+        
+        # Tablica otwarć - klucz to tuple z historii ruchów, wartość to najlepszy ruch
+        self.opening_book = self._initialize_opening_book()
+        
+        # Maksymalna głębokość historii ruchów do sprawdzania w tablicy otwarć
+        self.max_opening_depth = 8
+
+    def _initialize_opening_book(self) -> dict:
+        """Inicjalizuje tablicę otwarć z dobrymi ruchami początkowymi."""
+        opening_book = {}
+        
+        # Pierwszy ruch - zawsze środek planszy (kolumna 3 dla planszy 7x7)
+        opening_book[tuple()] = 3
+        
+        # Odpowiedzi na pierwsze ruchy przeciwnika
+        opening_book[(0,)] = 3  # Jeśli przeciwnik gra skraj, my gramy środek
+        opening_book[(1,)] = 3
+        opening_book[(2,)] = 3
+        opening_book[(3,)] = 2  # Jeśli przeciwnik gra środek, my gramy obok
+        opening_book[(4,)] = 3
+        opening_book[(5,)] = 3
+        opening_book[(6,)] = 3
+        
+        # Niektóre kontynuacje (dla gracza rozpoczynającego środkiem)
+        opening_book[(3, 2)] = 4   # Przeciwnik gra po lewej od środka, my po prawej
+        opening_book[(3, 4)] = 2   # Przeciwnik gra po prawej od środka, my po lewej
+        opening_book[(3, 1)] = 5   # Symetryczna odpowiedź
+        opening_book[(3, 5)] = 1   # Symetryczna odpowiedź
+        opening_book[(3, 0)] = 6   # Symetryczna odpowiedź
+        opening_book[(3, 6)] = 0   # Symetryczna odpowiedź
+        
+        # Kontynuacje gdy my rozpoczynamy środkiem, a przeciwnik odpowiada
+        opening_book[(3, 2, 4)] = 1  # Kontynuacja rozwoju
+        opening_book[(3, 4, 2)] = 5  # Kontynuacja rozwoju
+        opening_book[(3, 2, 1)] = 4  # Blokowanie formacji przeciwnika
+        opening_book[(3, 4, 5)] = 2  # Blokowanie formacji przeciwnika
+        
+        # Obrona przeciwko niektórym popularnym otwarciom
+        opening_book[(2, 3)] = 4    # Przeciwnik 2-3, my blokujemy
+        opening_book[(4, 3)] = 2    # Przeciwnik 4-3, my blokujemy
+        opening_book[(1, 3)] = 5    # Asymetryczne otwarcie
+        opening_book[(5, 3)] = 1    # Asymetryczne otwarcie
+        
+        # Dodatkowe wzorce dla lepszej gry
+        opening_book[(3, 3)] = 2    # Jeśli przeciwnik też gra środek
+        opening_book[(2, 4)] = 3    # Formacja 2-4, gramy środek
+        opening_book[(4, 2)] = 3    # Formacja 4-2, gramy środek
+        
+        return opening_book
+
+    def get_opening_move(self, game: Game) -> int:
+        """Sprawdza czy istnieje ruch w tablicy otwarć dla aktualnej pozycji."""
+        # Sprawdź tylko jeśli historia nie jest zbyt długa
+        if len(game.move_history) > self.max_opening_depth:
+            return None
+            
+        # Sprawdź bezpośrednio historię ruchów
+        move_tuple = tuple(game.move_history)
+        if move_tuple in self.opening_book:
+            suggested_move = self.opening_book[move_tuple]
+            # Sprawdź czy ruch jest legalny
+            if self.is_valid_move(game, suggested_move):
+                return suggested_move
+        
+        # Sprawdź również wzorce symetryczne (odbicie lustrzane)
+        # Dla planszy 7x7, kolumny mapują się: 0<->6, 1<->5, 2<->4, 3->3
+        symmetric_history = self.get_symmetric_history(game.move_history)
+        symmetric_tuple = tuple(symmetric_history)
+        
+        if symmetric_tuple in self.opening_book:
+            suggested_move = self.opening_book[symmetric_tuple]
+            # Odbij ruch symetrycznie
+            symmetric_move = self.get_symmetric_column(suggested_move, game.n_columns)
+            if self.is_valid_move(game, symmetric_move):
+                return symmetric_move
+        
+        return None
+
+    def get_symmetric_history(self, history: list) -> list:
+        """Zwraca symetryczne odbicie historii ruchów."""
+        return [6 - move for move in history]  # Dla planszy 7x7
+
+    def get_symmetric_column(self, column: int, n_columns: int) -> int:
+        """Zwraca symetryczne odbicie kolumny."""
+        return n_columns - 1 - column
+
+    def is_valid_move(self, game: Game, column: int) -> bool:
+        """Sprawdza czy ruch jest legalny."""
+        return (0 <= column < game.n_columns and 
+                len(game.board[column]) < game.n_rows)
 
     def make_move(self, game: Game) -> int:
         """Zwraca kolumnę dla najlepszego ruchu."""
@@ -197,9 +290,34 @@ class Player:
         if len(valid_moves) == 1:
             return valid_moves[0]
         
+        # NOWY KOD: Sprawdź tablicę otwarć na początku
+        opening_move = self.get_opening_move(game)
+        if opening_move is not None:
+            print(f"Using opening book move: {opening_move}")
+            return opening_move
+        
+        # Sprawdź czy można wygrać w jednym ruchu
+        for col in valid_moves:
+            game_copy = self.make_move_copy(game, col)
+            if game_copy.check_winner() == game.current_player:
+                return col
+        
+        # Sprawdź czy trzeba zablokować przeciwnika
+        for col in valid_moves:
+            game_copy = copy.deepcopy(game)
+            game_copy.current_player = 1 - game_copy.current_player  # Symuluj ruch przeciwnika
+            game_copy.board[col].append(game_copy.current_player)
+            if game_copy.check_winner() == game_copy.current_player:
+                return col
+        
+        # Użyj alpha-beta
         _, best_column = self.alpha_beta(game, self.max_depth, float('-inf'), float('inf'), True)
         
         if best_column is None or best_column not in valid_moves:
+            # Preferuj środek planszy jako fallback
+            center_col = game.n_columns // 2
+            if center_col in valid_moves:
+                return center_col
             return random.choice(valid_moves)
         
         return best_column
@@ -207,12 +325,23 @@ class Player:
     def alpha_beta(self, game: Game, depth: int, alpha: float, beta: float, maximizing_player: bool):
         """Implementacja algorytmu alpha-beta pruning."""
         winner = game.check_winner()
-        if winner is not None or depth == 0:
-            return self.evaluate_position(game, winner), None
+        
+        # Warunki końcowe
+        if winner is not None:
+            return self.evaluate_terminal(game, winner), None
+        
+        if depth == 0:
+            return self.evaluate_position(game), None
+        
+        if game.is_full():
+            return 0, None  # Remis
         
         valid_moves = self.get_valid_moves(game)
         if not valid_moves:
-            return self.evaluate_position(game, winner), None
+            return 0, None
+        
+        # Sortuj ruchy - preferuj środek planszy
+        valid_moves = self.order_moves(game, valid_moves)
         
         best_column = valid_moves[0]
         
@@ -228,7 +357,7 @@ class Player:
                 
                 alpha = max(alpha, eval_score)
                 if beta <= alpha:
-                    break
+                    break  # Alpha-beta pruning
             
             return max_eval, best_column
         else:
@@ -243,9 +372,21 @@ class Player:
                 
                 beta = min(beta, eval_score)
                 if beta <= alpha:
-                    break
+                    break  # Alpha-beta pruning
             
             return min_eval, best_column
+
+    def order_moves(self, game: Game, moves: list[int]) -> list[int]:
+        """Sortuje ruchy - preferuje środek planszy."""
+        center = game.n_columns // 2
+        return sorted(moves, key=lambda x: abs(x - center))
+
+    def evaluate_terminal(self, game: Game, winner: int) -> float:
+        """Ocenia pozycję końcową."""
+        if winner == game.current_player:
+            return -10000  # Przegraliśmy (to jest zły wynik dla nas)
+        else:
+            return 10000   # Wygraliśmy
 
     def get_valid_moves(self, game: Game) -> list[int]:
         """Zwraca listę dostępnych kolumn."""
@@ -259,59 +400,90 @@ class Player:
         game_copy.current_player = 1 - game_copy.current_player
         return game_copy
 
-    def evaluate_position(self, game: Game, winner: int) -> float:
+    def evaluate_position(self, game: Game) -> float:
         """Ocenia pozycję na planszy."""
-        if winner is not None:
-            if winner == game.current_player:
-                return -10000
-            else:
-                return 10000
-        
         score = 0
         
-        # Preferuj środek planszy
-        center_col = game.n_columns // 2
-        for row_idx in range(len(game.board[center_col])):
-            if game.board[center_col][row_idx] == game.current_player:
-                score += 2
+        # Ocena dla obu graczy
+        my_player = game.current_player
+        opp_player = 1 - my_player
         
-        # Ocena potencjalnych linii
-        score += self.evaluate_windows(game, game.current_player)
-        score -= self.evaluate_windows(game, 1 - game.current_player)
+        # Ocena wszystkich możliwych okien
+        score += self.evaluate_all_windows(game, my_player) * 1.0
+        score -= self.evaluate_all_windows(game, opp_player) * 1.1  # Nieco wyższa waga dla obrony
+        
+        # Bonus za środek planszy
+        center_col = game.n_columns // 2
+        center_count = sum(1 for piece in game.board[center_col] if piece == my_player)
+        score += center_count * 10
         
         return score
 
-    def evaluate_windows(self, game: Game, player: int) -> float:
-        """Ocenia potencjalne okna wygrywające."""
+    def evaluate_all_windows(self, game: Game, player: int) -> float:
+        """Ocenia wszystkie możliwe okna dla danego gracza."""
         score = 0
         win_len = game.winning_length
         
-        # Poziome okna
+        # Sprawdź wszystkie możliwe okna poziome
         for row in range(game.n_rows):
             for col in range(game.n_columns - win_len + 1):
-                window = []
-                for c in range(col, col + win_len):
-                    if len(game.board[c]) > row:
-                        window.append(game.board[c][row])
-                    else:
-                        window.append(None)
+                window = self.get_horizontal_window(game, row, col, win_len)
                 score += self.evaluate_window(window, player)
         
-        # Pionowe okna
+        # Sprawdź wszystkie możliwe okna pionowe
         for col in range(game.n_columns):
             for row in range(game.n_rows - win_len + 1):
-                window = []
-                for r in range(row, row + win_len):
-                    if len(game.board[col]) > r:
-                        window.append(game.board[col][r])
-                    else:
-                        window.append(None)
+                window = self.get_vertical_window(game, col, row, win_len)
+                score += self.evaluate_window(window, player)
+        
+        # Sprawdź wszystkie możliwe okna ukośne (\ direction)
+        for row in range(game.n_rows - win_len + 1):
+            for col in range(game.n_columns - win_len + 1):
+                window = self.get_diagonal_window(game, row, col, win_len, 1)
+                score += self.evaluate_window(window, player)
+        
+        # Sprawdź wszystkie możliwe okna ukośne (/ direction)
+        for row in range(win_len - 1, game.n_rows):
+            for col in range(game.n_columns - win_len + 1):
+                window = self.get_diagonal_window(game, row, col, win_len, -1)
                 score += self.evaluate_window(window, player)
         
         return score
 
+    def get_horizontal_window(self, game: Game, row: int, start_col: int, length: int) -> list:
+        """Pobiera poziome okno."""
+        window = []
+        for col in range(start_col, start_col + length):
+            if len(game.board[col]) > row:
+                window.append(game.board[col][row])
+            else:
+                window.append(None)
+        return window
+
+    def get_vertical_window(self, game: Game, col: int, start_row: int, length: int) -> list:
+        """Pobiera pionowe okno."""
+        window = []
+        for row in range(start_row, start_row + length):
+            if len(game.board[col]) > row:
+                window.append(game.board[col][row])
+            else:
+                window.append(None)
+        return window
+
+    def get_diagonal_window(self, game: Game, start_row: int, start_col: int, length: int, direction: int) -> list:
+        """Pobiera ukośne okno. direction: 1 dla \, -1 dla /"""
+        window = []
+        for i in range(length):
+            row = start_row + (i * direction)
+            col = start_col + i
+            if 0 <= row < game.n_rows and 0 <= col < game.n_columns and len(game.board[col]) > row:
+                window.append(game.board[col][row])
+            else:
+                window.append(None)
+        return window
+
     def evaluate_window(self, window: list, player: int) -> float:
-        """Ocenia pojedyncze okno."""
+        """Ocenia pojedyncze okno z lepszą heurystyką."""
         score = 0
         opp_player = 1 - player
         
@@ -319,18 +491,22 @@ class Player:
         opp_count = window.count(opp_player)
         empty_count = window.count(None)
         
+        # Jeśli przeciwnik już ma kawałki w tym oknie, nie możemy wygrać
+        if opp_count > 0:
+            return 0
+        
+        # Ocena na podstawie liczby naszych kawałków
         if player_count == 4:
-            score += 10000
+            score += 1000
         elif player_count == 3 and empty_count == 1:
-            score += 100
+            score += 50
         elif player_count == 2 and empty_count == 2:
             score += 10
-        
-        if opp_count == 3 and empty_count == 1:
-            score -= 5
+        elif player_count == 1 and empty_count == 3:
+            score += 1
         
         return score
-
+    
 # Stwórz nową grę
 game = Game()
 

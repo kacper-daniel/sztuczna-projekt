@@ -319,15 +319,17 @@ class Player:
         opp_count = window.count(opp_player)
         empty_count = window.count(None)
         
-        if opp_count > 0:
-            return 0
-        
         if player_count == 4:
             score += 100
         elif player_count == 3 and empty_count == 1:
             score += 10
         elif player_count == 2 and empty_count == 2:
             score += 2
+        
+        if opp_count == 4:
+            score -= 200
+        elif opp_count == 3 and empty_count == 1:
+            score -= 20
         
         return score
 
@@ -340,7 +342,7 @@ ai_player = Player()
 # Przykładowa gra 
 winner = None
 i = 0
-while winner is None and i < 10:
+while winner is None and i < 15:
     game.make_move(random.randint(0, game.n_columns - 1))
     winner = game.check_winner()
     i += 1

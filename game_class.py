@@ -263,9 +263,9 @@ class Player:
         """Ocenia pozycję na planszy."""
         if winner is not None:
             if winner == game.current_player:
-                return -1000
+                return -10000
             else:
-                return 1000
+                return 10000
         
         score = 0
         
@@ -273,7 +273,7 @@ class Player:
         center_col = game.n_columns // 2
         for row_idx in range(len(game.board[center_col])):
             if game.board[center_col][row_idx] == game.current_player:
-                score += 3
+                score += 2
         
         # Ocena potencjalnych linii
         score += self.evaluate_windows(game, game.current_player)
@@ -320,16 +320,14 @@ class Player:
         empty_count = window.count(None)
         
         if player_count == 4:
-            score += 100
+            score += 10000
         elif player_count == 3 and empty_count == 1:
-            score += 10
+            score += 100
         elif player_count == 2 and empty_count == 2:
-            score += 2
+            score += 10
         
-        if opp_count == 4:
-            score -= 200
-        elif opp_count == 3 and empty_count == 1:
-            score -= 20
+        if opp_count == 3 and empty_count == 1:
+            score -= 5
         
         return score
 
@@ -341,25 +339,16 @@ ai_player = Player()
 
 # Przykładowa gra 
 winner = None
-i = 0
-while winner is None and i < 15:
-    game.make_move(random.randint(0, game.n_columns - 1))
+
+while winner is None:
+    game.print_board()
+    if game.current_player == 0:
+        move = int(input())
+        game.make_move(move)
+    else:
+        best_move = ai_player.make_move(game)
+        game.make_move(best_move)
     winner = game.check_winner()
-    i += 1
 
-if winner is not None:
-    game.print_board()
-    print(f"wygral gracz {winner}")
-    
-else:
-    game.print_board()
-    best_move = ai_player.make_move(game)
-    print(f"Wybrana kolumna: {best_move}")
-
-    # Wykonaj ruch
-    game.make_move(best_move)
-    game.print_board()
-
-    winner = game.check_winner()
-    if winner is not None:
-        print(f"wygral gracz {winner}")
+game.print_board()
+print(f"wygral gracz {winner}")
